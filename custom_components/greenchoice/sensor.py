@@ -188,7 +188,7 @@ class GreenchoiceSensor(Entity):
         elif self._overeenkomst_id == CONF_OVEREENKOMST_ID or self._overeenkomst_id is None:
             _LOGGER.error('Need a overeenkomst id (see docs how to get one)!')
 
-        if data is None or self._measurement_type not in data:
+        if data is None or self._measurement_type not in data or 'measurement_date_electricity' not in data:
             self._state = STATE_UNKNOWN
         else:
             self._state = data[self._measurement_type]
@@ -220,8 +220,10 @@ class GreenchoiceSensor(Entity):
             self._unit_of_measurement = 'kWh'
 
         elif self._measurement_type == 'gas_consumption':
-            self._measurement_date = data['measurement_date_gas']
-
+            if 'measurement_date_gas' not in data:
+                self._state = "STATE_UNKNOWN"
+            else:
+                self._measurement_date = data['measurement_date_gas']
             self._icon = 'mdi:fire'
             self._name = 'gas_consumption'
             self._unit_of_measurement = 'm3'
@@ -305,6 +307,17 @@ class GreenchoiceApiData:
         }
         return self.request('POST', '/microbus/request', payload)
 
+    def _get_most_recent_entries(self, values):
+        current_month = sorted(filter(lambda v: 'opnames' in v and len(v['opnames']) > 0, values), key=lambda m: (m['jaar'], m['maand']), reverse=True)[0]
+        if not current_month or len(current_month['opnames']):
+            return None
+
+        return sorted(
+            current_month['opnames'],
+            key=lambda d: datetime.strptime(d['opnameDatum'], '%Y-%m-%dT%H:%M:%S'),
+            reverse=True
+        )[0]
+
     @Throttle(MIN_TIME_BETWEEN_UPDATES)
     def update(self):
         self.result = {}
@@ -324,12 +337,10 @@ class GreenchoiceApiData:
 
         # parse energy data
         electricity_values = monthly_values['model']['productenOpnamesModel'][0]['opnamesJaarMaandModel']
-        current_month = sorted(electricity_values, key=lambda m: (m['jaar'], m['maand']), reverse=True)[0]
-        current_day = sorted(
-            current_month['opnames'],
-            key=lambda d: datetime.strptime(d['opnameDatum'], '%Y-%m-%dT%H:%M:%S'),
-            reverse=True
-        )[0]
+        current_day = self._get_most_recent_entries(electricity_values)
+        if current_day is None:
+            _LOGGER.error('Could not update meter values: No current values for electricity found')
+            return
 
         # process energy types
         for measurement in current_day['standen']:
@@ -338,7 +349,7 @@ class GreenchoiceApiData:
 
         # total energy count
         self.result['energy_consumption_total'] = self.result['energy_consumption_high'] + \
-            self.result['energy_consumption_low']
+                                                  self.result['energy_consumption_low']
         self.result['energy_return_total'] = self.result['energy_return_high'] + self.result['energy_return_low']
 
         self.result['measurement_date_electricity'] = datetime.strptime(current_day['opnameDatum'], '%Y-%m-%dT%H:%M:%S')
@@ -346,12 +357,10 @@ class GreenchoiceApiData:
         # process gas
         if monthly_values['model']['heeftGas']:
             gas_values = monthly_values['model']['productenOpnamesModel'][1]['opnamesJaarMaandModel']
-            current_month = sorted(gas_values, key=lambda m: (m['jaar'], m['maand']), reverse=True)[0]
-            current_day = sorted(
-                current_month['opnames'],
-                key=lambda d: datetime.strptime(d['opnameDatum'], '%Y-%m-%dT%H:%M:%S'),
-                reverse=True
-            )[0]
+            current_day = self._get_most_recent_entries(gas_values)
+            if current_day is None:
+                _LOGGER.error('Could not update meter values: No current values for gas found')
+                return
 
             measurement = current_day['standen'][0]
             if measurement['telwerk'] == 5:
