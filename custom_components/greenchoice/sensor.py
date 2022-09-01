@@ -21,8 +21,10 @@ _RESOURCE = 'https://mijn.greenchoice.nl'
 CONF_OVEREENKOMST_ID = 'overeenkomst_id'
 CONF_USERNAME = 'username'
 CONF_PASSWORD = 'password'
+CONF_SENSOR_NAME_PREFIX = 'sensor_name_prefix'
 
 DEFAULT_NAME = 'Energieverbruik'
+DEFAULT_SENSOR_NAME_PREFIX = ''
 DEFAULT_DATE_FORMAT = '%y-%m-%dT%H:%M:%S'
 
 ATTR_NAME = 'name'
@@ -45,6 +47,7 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
     vol.Optional(CONF_USERNAME, default=CONF_USERNAME): cv.string,
     vol.Optional(CONF_PASSWORD, default=CONF_USERNAME): cv.string,
     vol.Optional(CONF_OVEREENKOMST_ID, default=CONF_OVEREENKOMST_ID): cv.string,
+    vol.Optional(CONF_SENSOR_NAME_PREFIX, default=DEFAULT_SENSOR_NAME_PREFIX): cv.string,
 })
 
 
@@ -54,6 +57,7 @@ def setup_platform(hass, config, add_entities, discovery_info=None):
     overeenkomst_id = config.get(CONF_OVEREENKOMST_ID)
     username = config.get(CONF_USERNAME)
     password = config.get(CONF_PASSWORD)
+    sensor_name_prefix = config.get(CONF_SENSOR_NAME_PREFIX)
 
     greenchoice_api = GreenchoiceApiData(overeenkomst_id, username, password)
 
@@ -63,15 +67,15 @@ def setup_platform(hass, config, add_entities, discovery_info=None):
         raise PlatformNotReady
 
     sensors = [
-        GreenchoiceSensor(greenchoice_api, name, overeenkomst_id, username, password, 'currentGas'),
-        GreenchoiceSensor(greenchoice_api, name, overeenkomst_id, username, password, 'energy_consumption_high'),
-        GreenchoiceSensor(greenchoice_api, name, overeenkomst_id, username, password, 'energy_consumption_low'),
-        GreenchoiceSensor(greenchoice_api, name, overeenkomst_id, username, password, 'energy_consumption_total'),
-        GreenchoiceSensor(greenchoice_api, name, overeenkomst_id, username, password, 'energy_return_high'),
-        GreenchoiceSensor(greenchoice_api, name, overeenkomst_id, username, password, 'energy_return_low'),
-        GreenchoiceSensor(greenchoice_api, name, overeenkomst_id, username, password, 'energy_return_total'),
+        GreenchoiceSensor(greenchoice_api, overeenkomst_id, username, password, sensor_name_prefix, 'currentGas'),
+        GreenchoiceSensor(greenchoice_api, overeenkomst_id, username, password, sensor_name_prefix, 'energy_consumption_high'),
+        GreenchoiceSensor(greenchoice_api, overeenkomst_id, username, password, sensor_name_prefix, 'energy_consumption_low'),
+        GreenchoiceSensor(greenchoice_api, overeenkomst_id, username, password, sensor_name_prefix, 'energy_consumption_total'),
+        GreenchoiceSensor(greenchoice_api, overeenkomst_id, username, password, sensor_name_prefix, 'energy_return_high'),
+        GreenchoiceSensor(greenchoice_api, overeenkomst_id, username, password, sensor_name_prefix, 'energy_return_low'),
+        GreenchoiceSensor(greenchoice_api, overeenkomst_id, username, password, sensor_name_prefix, 'energy_return_total'),
 
-        GreenchoiceSensor(greenchoice_api, name, overeenkomst_id, username, password, 'gas_consumption'),
+        GreenchoiceSensor(greenchoice_api, overeenkomst_id, username, password, sensor_name_prefix, 'gas_consumption'),
     ]
     add_entities(sensors, True)
 
@@ -107,9 +111,9 @@ class LoginError(Exception):
 
 
 class GreenchoiceSensor(Entity):
-    def __init__(self, greenchoice_api, name, overeenkomst_id, username, password, measurement_type, ):
+    def __init__(self, greenchoice_api, overeenkomst_id, username, password, sensor_name_prefix, measurement_type, ):
         self._json_data = greenchoice_api
-        self._name = name
+        self._name = f"{sensor_name_prefix}_{measurement_type}" if sensor_name_prefix else measurement_type
         self._overeenkomst_id = overeenkomst_id
         self._username = username
         self._password = password
@@ -196,34 +200,27 @@ class GreenchoiceSensor(Entity):
 
         if self._measurement_type == 'energy_consumption_high':
             self._icon = 'mdi:weather-sunset-up'
-            self._name = 'energy_consumption_high'
             self._unit_of_measurement = 'kWh'
         elif self._measurement_type == 'energy_consumption_low':
             self._icon = 'mdi:weather-sunset-down'
-            self._name = 'energy_consumption_low'
             self._unit_of_measurement = 'kWh'
         elif self._measurement_type == 'energy_consumption_total':
             self._icon = 'mdi:transmission-tower-export'
-            self._name = 'energy_consumption_total'
             self._unit_of_measurement = 'kWh'
         elif self._measurement_type == 'energy_return_high':
             self._icon = 'mdi:solar-power'
-            self._name = 'energy_return_high'
             self._unit_of_measurement = 'kWh'
         elif self._measurement_type == 'energy_return_low':
             self._icon = 'mdi:solar-panel'
-            self._name = 'energy_return_low'
             self._unit_of_measurement = 'kWh'
         elif self._measurement_type == 'energy_return_total':
             self._icon = 'mdi:transmission-tower-import'
-            self._name = 'energy_return_total'
             self._unit_of_measurement = 'kWh'
 
         elif self._measurement_type == 'gas_consumption':
             self._measurement_date = data['measurement_date_gas']
 
             self._icon = 'mdi:fire'
-            self._name = 'gas_consumption'
             self._unit_of_measurement = 'm3'
 
 
