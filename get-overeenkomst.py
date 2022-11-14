@@ -63,18 +63,19 @@ def main():
     init_data = sess.get('https://mijn.greenchoice.nl/microbus/init').json()
 
     customer_number = init_data['profile']['voorkeursOvereenkomst']['klantnummer']
-    customer = next((customer for customer in init_data['klantgegevens']
-                     if customer['klantnummer'] == customer_number), None)
-    if customer is None:
+    customers = [customer for customer in init_data['klantgegevens']
+                     if customer['klantnummer'] == customer_number]
+    if not customers:
         print(f'Could not find customer details with ID {customer_number}')
 
-    addresses = customer['adressen']
-    for address in addresses:
-        postcode = address.get('postcode', '')
-        city = address.get('plaats', '').capitalize()
-        location = f'{postcode}, {city}'.ljust(30, ' ')
+    for customer in customers:
+        addresses = customer['adressen']
+        for address in addresses:
+            postcode = address.get('postcode', '')
+            city = address.get('plaats', '').capitalize()
+            location = f'{postcode}, {city}'.ljust(30, ' ')
 
-        print(f'{location} => {address["overeenkomstId"]}')
+            print(f'{location} => {address["overeenkomstId"]}')
 
 
 if __name__ == '__main__':
